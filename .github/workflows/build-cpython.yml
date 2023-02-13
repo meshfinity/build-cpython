@@ -1,0 +1,63 @@
+name: Build CPython
+
+on:
+  workflow_dispatch:
+    inputs:
+      pythonVersion:
+        description: CPython version (see https://github.com/python/cpython/branches for available options)
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GH_ACTIONS_BUILD_CPYTHON_VERSION: ${{ github.event.inputs.pythonVersion }}
+
+jobs:
+  build-macos:
+    name: Build CPython for macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: python/cpython
+          ref: ${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}
+      - run: echo "LDFLAGS=-L$(brew --prefix tcl-tk)/lib" >> $GITHUB_ENV
+      - run: echo "PKG_CONFIG_PATH=$(brew --prefix openssl@1.1)/lib/pkgconfig:$(brew --prefix tcl-tk)/lib/pkgconfig" >> $GITHUB_ENV
+      - run: ./configure --with-suffix="" --disable-test-modules --with-ensurepip=no --enable-optimizations --with-lto=full --without-static-libpython --without-readline --prefix=$HOME/python-$GH_ACTIONS_BUILD_CPYTHON_VERSION
+      - run: make -j4
+      - run: make pythoninfo
+      - run: make install
+      - run: find $HOME/python-$GH_ACTIONS_BUILD_CPYTHON_VERSION -name .DS_Store -delete
+      - run: mv $HOME/python-$GH_ACTIONS_BUILD_CPYTHON_VERSION $HOME/python-$GH_ACTIONS_BUILD_CPYTHON_VERSION-macos
+      - run: ditto -c -k --sequesterRsrc --keepParent $HOME/python-$GH_ACTIONS_BUILD_CPYTHON_VERSION-macos python-$GH_ACTIONS_BUILD_CPYTHON_VERSION-macos.zip
+      - uses: softprops/action-gh-release@v0.1.15
+        with:
+          tag_name: python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}
+          files: python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}-macos.zip
+  build-windows:
+    name: Build CPython for Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: python/cpython
+          ref: ${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}
+      - run: .\PCbuild\get_externals.bat
+      - run: .\PCbuild\build.bat -e -c Release -p x64
+        timeout-minutes: 30
+      - run: del .\PCbuild\amd64\*.env
+      - run: del .\PCbuild\amd64\*.exp
+      - run: del .\PCbuild\amd64\*.ilk
+      - run: del .\PCbuild\amd64\*.lib
+      - run: del .\PCbuild\amd64\*.pdb
+      - run: del .\PCbuild\amd64\pybuilddir.txt
+      - run: mkdir .\PCbuild\amd64\lib
+      - run: xcopy /E .\Lib .\PCbuild\amd64\lib
+      - run: .\python.bat -m test.pythoninfo
+      - run: Rename-Item .\PCbuild\amd64 -NewName python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}-windows
+      - run: Compress-Archive .\PCbuild\python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}-windows python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}-windows.zip
+      - uses: softprops/action-gh-release@v0.1.15
+        with:
+          tag_name: python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}
+          files: python-${{ env.GH_ACTIONS_BUILD_CPYTHON_VERSION }}-windows.zip
