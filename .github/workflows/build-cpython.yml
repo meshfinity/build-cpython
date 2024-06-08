@@ -51,7 +51,6 @@ jobs:
       - run: del .\PCbuild\amd64\*.ilk
       - run: del .\PCbuild\amd64\*.lib
       - run: del .\PCbuild\amd64\*.pdb
-      - run: del .\PCbuild\amd64\pybuilddir.txt
       - run: mkdir .\PCbuild\amd64\lib
       - run: xcopy /E .\Lib .\PCbuild\amd64\lib
       - run: .\python.bat -m test.pythoninfo
